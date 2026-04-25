@@ -1,0 +1,5 @@
+opencv-python==4.9.0
+pymunk==6.6.0
+pygame==2.5.2
+pytest==8.2.0
+python-dotenv==1.0.0
