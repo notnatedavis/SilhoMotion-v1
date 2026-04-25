@@ -113,11 +113,7 @@ SilhoMotion/
     ```bash
     scripts/run.sh
     ```
-
-5. **Chat with your bot on Telegram**
-- Send /start or any message
-- Use bash scripts/status.sh to see if it’s alive
-
+    
 ---
 
 ## Configuration
