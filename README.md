@@ -20,11 +20,12 @@ A creative, interactive system that captures a user’s silhouette via a webcam,
 SilhoMotion turns you into a dynamic obstacle in a physics playground. A camera extracts your silhouette, which becomes a static collision shape in a Pymunk‑based simulation. A second display (projector) shows the evolving scene – adding balls, forces, or visual effects. A dark‑themed Tkinter window lets you pause physics, adjust gravity, and run calibration.
 
 **Core components:**
-- **Camera** – OpenCV with background subtraction (MOG2) to extract the silhouette.
+- **Camera** – OpenCV with background subtraction (MOG2) and contour extraction.
 - **Physics** – Pymunk space where each person becomes a collection of static line segments.
-- **Projector** – Pygame fullscreen window on a chosen monitor.
-- **GUI** – Tkinter control panel with toggles and sliders.
+- **Projector** – Pygame fullscreen window on a chosen monitor (multi‑monitor support).
+- **GUI** – Tkinter control panel with toggles, sliders, and callback wiring.
 - **Calibration** – QR‑code‑based homography to map camera coordinates to the projector.
+- **Mapping** – A dedicated `Mapper` class transforms silhouette points from camera space to projector space using the homography.
 
 Everything runs locally, free of charge, and the code is designed for clarity and extensibility.
 
@@ -32,12 +33,13 @@ Everything runs locally, free of charge, and the code is designed for clarity an
 
 ## Features
 
-- **Real‑time silhouette extraction** via MOG2 background subtractor.
+- **Real‑time silhouette extraction** via MOG2 background subtractor and contour simplification.
 - **2D physics simulation** using Pymunk – turning silhouettes into solid obstacles.
-- **Flexible calibration** with QR marker detection and perspective mapping.
-- **Independent control GUI** with dark theme, toggles, sliders, and logging of all actions.
+- **Flexible calibration** with QR marker detection (instant) and perspective mapping, driven by the main loop.
+- **Independent control GUI** with dark theme, toggles, sliders, and callbacks for all actions.
 - **Graceful error handling** – components raise specific exceptions, and the main loop logs and exits cleanly.
 - **Lightweight dependencies** – OpenCV, Pymunk, Pygame, Tkinter (built‑in), and dotenv.
+- **Multi‑monitor support** – correctly opens fullscreen on the specified projector screen.
 
 ---
 
@@ -49,24 +51,25 @@ SilhoMotion/
 ├── .gitignore            # Excludes logs, venv, .env
 ├── camera/
 │   ├── __init__.py
-│   ├── calibrator.py     # QR‑based homography calculator
-│   ├── capture.py        # Silhouette extraction via webcam
+│   ├── calibrator.py     # QR‑based homography calculator (instant detection)
+│   ├── capture.py        # Silhouette extraction + contour finding
+│   ├── mapper.py         # Applies homography to contour points
 │   └── exceptions.py     # Custom camera errors
 ├── docs/
 │   └── notes.md
 ├── gui/
 │   ├── __init__.py
-│   ├── control_window.py # Tkinter control panel
+│   ├── control_window.py # Tkinter control panel with callback injection
 │   └── styles.py         # Dark theme colours & font
 ├── logs/                 # Runtime logs (rotated, not tracked)
 ├── physics/
 │   ├── __init__.py
 │   ├── exceptions.py
-│   └── simulation.py     # Pymunk physics world
+│   └── simulation.py     # Pymunk physics world with obstacle management
 ├── projector/
 │   ├── __init__.py
 │   ├── exceptions.py
-│   └── output.py         # Pygame fullscreen projection
+│   └── output.py         # Pygame fullscreen projection on chosen monitor
 ├── scripts/
 │   ├── calibrate.sh      # Launch calibration (future)
 │   ├── run.sh            # Activate venv & run main
@@ -78,10 +81,10 @@ SilhoMotion/
 │   └── test_utils.py
 ├── utils/
 │   ├── __init__.py
-│   ├── logger.py         # Logger with console + rotation
-│   └── validators.py     # Config validation
-├── config.py             # All adjustable parameters
-├── main.py               # Entry point
+│   ├── logger.py         # Logger w/ console + rotation
+│   └── validators.py     # Config validation (checks projector resolution)
+├── config.py             # all adjustable parameters (projector width/height)
+├── main.py               # Entry point w/ calibration state machine
 └── requirements.txt      # Python dependencies
 ```
 
@@ -122,6 +125,8 @@ SilhoMotion/
 All tunable settings are in config.py, loaded from environment variables via .env :
 - `CAMERA_INDEX` – webcam index (default 0)
 - `PROJECTOR_SCREEN` – which display to use for projection (default 1)
+- `PROJECTOR_WIDTH` – horizontal resolution of the projector (default 1920)
+- `PROJECTOR_HEIGHT` – vertical resolution of the projector (default 1080)
 - `PHYSICS_GRAVITY` – gravity vector (default (0, 500))
 - `FRAME_RATE` – target simulation rate
 - `CALIBRATION_TIMEOUT` – seconds before QR detection times out
@@ -132,20 +137,15 @@ Constants can be changed in .env without modifying code
 
 ## Additional-Info
 
-**Future enhancements**
-- Complete calibration workflow – interactive QR placement and automatic homography application.
+**Calibration workflow**
 
-- Physics visual richness – render balls, soft bodies, or particle effects.
-
-- Multi‑person tracking – separate silhouettes as distinct (or combined) obstacles.
-
-- Better multi‑monitor support – use Pygame2 or pyglet for reliable secondary display.
-
-- Data encoding/decoding – as mentioned in early notes, an optional file shuffler using a key could be integrated for fun demos.
+1. Press “Start Calibration” in the GUI.
+2. Place a QR code in view of the camera.
+3. The main loop will detect the code within the configured timeout and compute the homography
+4. Once calibrated, your silhouette will be transformed into physics obstacles in projector space.
 
 **Logging & Debugging**
-
-All modules log to both console (INFO) and logs/project.log (DEBUG, rotated). Consult these files if something goes wrong.
+All modules log to both console (INFO) and logs/project.log (DEBUG, rotated).
 
 ---
 

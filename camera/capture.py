@@ -1,7 +1,7 @@
 # camera/capture.py
 
-# Handles real-time frame grabbing from the camera (OpenCV VideoCapture), 
-#    applies background subtraction to extract the user’s 
+# Handles real-time frame grabbing from the camera (OpenCV VideoCapture),
+#    applies background subtraction to extract the user’s
 #    silhouette/contour
 
 # ----- Imports -----
@@ -47,6 +47,24 @@ class SilhouetteCapture :
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         cleaned = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
         return cleaned
+
+    def extract_contour(self, mask, min_area=500) :
+        # Find the largest external contour from the binary mask.
+        # Returns a list of (x, y) points after simplification.
+        
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours :
+            return []
+        # Largest contour
+        largest = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(largest) < min_area :
+            return []
+        # Simplify polygon
+        epsilon = 0.005 * cv2.arcLength(largest, True)
+        approx = cv2.approxPolyDP(largest, epsilon, True)
+        points = [tuple(pt[0]) for pt in approx]
+        logger.debug("Extracted contour with %d points.", len(points))
+        return points
 
     def release(self) :
         # Release the camera resource

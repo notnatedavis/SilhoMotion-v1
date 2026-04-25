@@ -1,6 +1,6 @@
 # gui/control_window.py
 
-# Creates a separate control panel (Tkinter/PyQt) with toggles, sliders, 
+# Creates a separate control panel (Tkinter) with toggles, sliders,
 #    and buttons to adjust simulation parameters, start/stop calibration,
 #    and manage fullscreen projection
 
@@ -15,10 +15,18 @@ logger = logging.getLogger(__name__)
 class ControlWindow :
     # Tkinter control panel for simulation toggles, sliders, and actions
 
-    def __init__(self) :
+    def __init__(self, on_pause_toggle=None, on_silhouette_toggle=None,
+                 on_gravity_change=None, on_calibrate=None, on_quit=None) :
         self.root = tk.Tk()
         self.root.title("SilhoMotion Control")
         self.root.configure(bg=BG_COLOUR)
+
+        # Callbacks – default no‑op if not supplied
+        self.on_pause_toggle = on_pause_toggle or (lambda v: None)
+        self.on_silhouette_toggle = on_silhouette_toggle or (lambda v: None)
+        self.on_gravity_change = on_gravity_change or (lambda v: None)
+        self.on_calibrate = on_calibrate or (lambda: None)
+        self.on_quit = on_quit or (lambda: self.root.quit())
 
         # ----- Control variables -----
         self.pause_var = tk.BooleanVar(value=False)
@@ -72,27 +80,30 @@ class ControlWindow :
     # ----- Callbacks with logging -----
     def _on_pause_toggle(self) :
         logger.info("Pause physics toggled: %s", self.pause_var.get())
+        self.on_pause_toggle(self.pause_var.get())
 
     def _on_silhouette_toggle(self) :
         logger.info("Show silhouette toggled: %s", self.show_silhouette_var.get())
+        self.on_silhouette_toggle(self.show_silhouette_var.get())
 
     def _on_gravity_change(self, value) :
         logger.info("Gravity scale changed to: %s", value)
+        self.on_gravity_change(float(value))
 
     def _on_calibrate(self) :
         try :
             logger.info("Calibration started from GUI.")
-            # Placeholder: trigger calibration process
-            # In a full implementation, this would interact with main.py
+            self.on_calibrate()
         except Exception as e :
             logger.exception("Calibration error.")
 
     def _on_quit(self) :
         logger.info("Quit requested from GUI.")
+        self.on_quit()
         self.root.quit()
         self.root.destroy()
 
-    def update(self):
+    def update(self) :
         # Process pending GUI events
         self.root.update_idletasks()
         self.root.update()

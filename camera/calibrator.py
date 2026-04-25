@@ -1,13 +1,11 @@
 # camera/calibrator.py
 
-# Uses a QR code or similar marker to compute the homography between 
-#    camera image space and projector screen space, enabling spatial 
-#    mapping of user position onto the simulation
+# Detects a QR code in a single frame. The homography is later computed
+#    using the found corners and the known projector rectangle.
 
 # ----- Imports -----
 import cv2
 import numpy as np
-import time
 import logging
 from camera.exceptions import CalibrationError
 
@@ -21,24 +19,20 @@ class Calibrator :
         self.qr_detector = cv2.QRCodeDetector()
         logger.debug("QR code detector initialised.")
 
-    def detect_qr_with_timeout(self, frame, timeout_sec=10) :
-        # Attempt to detect a QR code in the frame within a time window.
-        # Returns the bounding box corners if found, else raises CalibrationError.
+    def detect_qr(self, frame) :
+        # Return 4 corner points (Nx2) if a QR code is found, otherwise None.
+        # Does not loop – the caller handles frame grabbing and timeout.
         
-        start = time.time()
-        while time.time() - start < timeout_sec :
-            data, points, _ = self.qr_detector.detectAndDecode(frame)
-            if points is not None :
-                logger.info("QR code detected. Data: %s", data)
-                return points.reshape((-1, 2)) # 4 corners (x,y)
-            time.sleep(0.1) # small delay to avoid busy‑waiting
-        raise CalibrationError(f"QR code not found within {timeout_sec} seconds.")
+        data, points, _ = self.qr_detector.detectAndDecode(frame)
+        if points is not None :
+            logger.info("QR code detected. Data: %s", data)
+            return points.reshape((-1, 2))   # 4 corners (x,y)
+        return None
 
     def compute_homography(self, qr_corners, projector_resolution) :
         # Calculate perspective transformation from QR corners (camera space)
         # to the known projector rectangle.
         
-        # Projector rectangle corners in screen coordinates (order: top‑left to bottom‑left)
         proj_corners = np.array([
             [0, 0],
             [projector_resolution[0], 0],
@@ -46,7 +40,6 @@ class Calibrator :
             [0, projector_resolution[1]]
         ], dtype=np.float32)
 
-        # Ensure QR corners are float32
         qr_corners = np.array(qr_corners, dtype=np.float32)
         H, _ = cv2.findHomography(qr_corners, proj_corners)
         logger.debug("Homography computed.")

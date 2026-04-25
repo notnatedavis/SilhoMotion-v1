@@ -1,13 +1,12 @@
 # projector/output.py
 
-# Manages a fullscreen window on the projector (second display/HDMI) 
-#    using Pygame or OpenCV; draws the simulation visuals and any 
+# Manages a fullscreen window on the projector (second display)
+#    using Pygame; draws the simulation visuals and any
 #    calibration overlays
 
 # ----- Imports -----
 import pygame
 import logging
-import time
 from projector.exceptions import ProjectorInitError
 
 # ----- Logger -----
@@ -16,32 +15,24 @@ logger = logging.getLogger(__name__)
 class ProjectorWindow :
     # Manages a fullscreen Pygame window on the selected projector screen
 
-    def __init__(self, screen_index=1) :
+    def __init__(self, screen_index=1, resolution=(1920, 1080)) :
         pygame.init()
-        self.display_info = pygame.display.Info()
-        num_displays = self._get_num_displays()
-        if screen_index >= num_displays :
-            raise ProjectorInitError(
-                f"Screen index {screen_index} out of range ({num_displays} available)."
+        # Use the display keyword to target a specific monitor (0‑based)
+        self.screen = None
+        try :
+            # Some Pygame builds may not support the 'display' argument;
+            # fall back to screen 0 if needed.
+            self.screen = pygame.display.set_mode(
+                resolution, pygame.FULLSCREEN, display=screen_index
             )
-        logger.info("Opening fullscreen on display %d.", screen_index)
-        # Set environment variable before initialising display
-        import os
-        os.environ['SDL_VIDEO_WINDOW_POS'] = f"0,0"   # approximate; for precise placement use pygame.display.set_mode flags
-        # Note: pygame doesn't directly support multi‑monitor selection; using fullscreen on screen 0.
-        # To target a specific monitor, we rely on the operating system setting that screen as primary.
-        # A robust solution would use pyglet or SDL2 directly. For simplicity, we use fullscreen on screen 0.
-        self.screen = pygame.display.set_mode(
-            (self.display_info.current_w, self.display_info.current_h),
-            pygame.FULLSCREEN
-        )
+        except pygame.error as e :
+            raise ProjectorInitError(
+                f"Cannot open fullscreen on display {screen_index}: {e}"
+            )
         pygame.display.set_caption("SilhoMotion Projector")
         self.clock = pygame.time.Clock()
-        logger.info("Projector window initialised.")
-
-    def _get_num_displays(self) :
-        # Pygame doesn't have a direct API; assume 1 unless we handle it differently
-        return 1   # placeholder – see improvement note (if exists)
+        logger.info("Projector window initialised on display %d, resolution %s.",
+                    screen_index, resolution)
 
     def draw_frame(self, simulation_state: dict) :
         # Render the simulation visual. 'simulation_state' is a placeholder dict
