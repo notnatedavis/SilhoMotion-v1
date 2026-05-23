@@ -1,3 +1,3 @@
-# projector/exceptions.py
+# projection/exceptions.py
 
 class ProjectorInitError(Exception): pass

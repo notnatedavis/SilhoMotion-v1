@@ -1,5 +1,8 @@
-opencv-python==4.9.0
+# requirements.txt
+
+numpy<2
+opencv-python==4.9.0.80
 pymunk==6.6.0
-pygame==2.5.2
+pygame>=2.6.0.dev0
 pytest==8.2.0
-python-dotenv==1.0.0
+customtkinter

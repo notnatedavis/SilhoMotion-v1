@@ -38,7 +38,7 @@ Everything runs locally, free of charge, and the code is designed for clarity an
 - **Flexible calibration** with QR marker detection (instant) and perspective mapping, driven by the main loop.
 - **Independent control GUI** with dark theme, toggles, sliders, and callbacks for all actions.
 - **Graceful error handling** – components raise specific exceptions, and the main loop logs and exits cleanly.
-- **Lightweight dependencies** – OpenCV, Pymunk, Pygame, Tkinter (built‑in), and dotenv.
+- **Lightweight dependencies** – OpenCV, Pymunk, Pygame, Tkinter (built‑in)
 - **Multi‑monitor support** – correctly opens fullscreen on the specified projector screen.
 
 ---
@@ -47,8 +47,6 @@ Everything runs locally, free of charge, and the code is designed for clarity an
 
 ```bash
 SilhoMotion/
-├── .env.example          # Environment variable template
-├── .gitignore            # Excludes logs, venv, .env
 ├── camera/
 │   ├── __init__.py
 │   ├── calibrator.py     # QR‑based homography calculator (instant detection)
@@ -56,12 +54,14 @@ SilhoMotion/
 │   ├── mapper.py         # Applies homography to contour points
 │   └── exceptions.py     # Custom camera errors
 ├── docs/
-│   └── notes.md
+│   ├── Notes.md
+│   ├── Todo.md
+│   └── Vision.md
 ├── gui/
 │   ├── __init__.py
 │   ├── control_window.py # Tkinter control panel with callback injection
+│   ├── main_menu.py
 │   └── styles.py         # Dark theme colours & font
-├── logs/                 # Runtime logs (rotated, not tracked)
 ├── physics/
 │   ├── __init__.py
 │   ├── exceptions.py
@@ -70,21 +70,14 @@ SilhoMotion/
 │   ├── __init__.py
 │   ├── exceptions.py
 │   └── output.py         # Pygame fullscreen projection on chosen monitor
-├── scripts/
-│   ├── calibrate.sh      # Launch calibration (future)
-│   ├── run.sh            # Activate venv & run main
-│   └── setup.sh          # Create venv & install deps
-├── tests/
-│   ├── __init__.py
-│   ├── test_camera.py
-│   ├── test_physics.py
-│   └── test_utils.py
 ├── utils/
 │   ├── __init__.py
 │   ├── logger.py         # Logger w/ console + rotation
 │   └── validators.py     # Config validation (checks projector resolution)
-├── config.py             # all adjustable parameters (projector width/height)
+├── .gitignore            # Excludes logs, venv, .env
+├── common.py
 ├── main.py               # Entry point w/ calibration state machine
+├── ReadMe.md             # You are here (hi!)
 └── requirements.txt      # Python dependencies
 ```
 
@@ -99,26 +92,25 @@ SilhoMotion/
 
 2. **Set up environment**
     ```bash
-    cp .env.example .env
-    # edit .env if needed
+    python -m venv venv || python3 -m venv venv
+    venv\Scripts\activate  ||  source venv/bin/activate
     ```
 
-3. **Run the setup script**
+3. **Prerequisites**
     ```bash
-   chmod +x scripts/*.sh
-   scripts/setup.sh
+   pip install -r requirements.txt
    ```
 
 4. **Start the application**
     ```bash
-    scripts/run.sh
+    python main.py || python3 main.py
     ```
     
 ---
 
 ## Configuration
 
-All tunable settings are in config.py, loaded from environment variables via .env :
+All tunable settings are in common.py,
 - `CAMERA_INDEX` – webcam index (default 0)
 - `PROJECTOR_SCREEN` – which display to use for projection (default 1)
 - `PROJECTOR_WIDTH` – horizontal resolution of the projector (default 1920)
@@ -127,34 +119,10 @@ All tunable settings are in config.py, loaded from environment variables via .en
 - `FRAME_RATE` – target simulation rate
 - `CALIBRATION_TIMEOUT` – seconds before QR detection times out
 
-Constants can be changed in .env without modifying code
-
 ---
 
 ## Additional-Info
 
-**Calibration workflow**
-
-1. Press “Start Calibration” in the GUI.
-2. Place a QR code in view of the camera.
-3. The main loop will detect the code within the configured timeout and compute the homography
-4. Once calibrated, your silhouette will be transformed into physics obstacles in projector space.
-
-**Logging & Debugging**
-All modules log to both console (INFO) and logs/project.log (DEBUG, rotated).
+update this
 
 ---
-
-### 5. Next‑Focus Advice
-
-With the core skeleton now functional, prioritise the following to increase robustness and usability:
-
-1. **Full‑fledged calibration**: Link the GUI’s “Start Calibration” button to a calibration routine that uses `Calibrator` and applies the homography to map silhouette coordinates into physics space.  
-2. **Projector rendering**: Replace the placeholder `draw_frame` with actual drawing of dynamic objects (e.g., multiple falling balls, the silhouette outline) using the physics state.  
-3. **Multi‑display support**: Replace the simple fullscreen assumption with a robust method to target a specific monitor (e.g., using `pygame.RESIZABLE` and setting window position via `SDL_VIDEO_WINDOW_POS` properly).  
-4. **Performance monitoring**: Add frame‑time tracking in the main loop and log warnings when FPS drops below a threshold.  
-5. **Expand test coverage**: Add integration tests, mock the Tkinter mainloop, and test the full pipeline end‑to‑end.  
-6. **Improve silhouette processing**: Apply contour extraction, smoothing, and simplification to reduce the number of physics segments for better performance.  
-7. **Documentation**: Add inline docstrings to all public methods and possibly generate API docs with Sphinx.
-
-These steps will turn the prototype into a polished, performant interactive installation.

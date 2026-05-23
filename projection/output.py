@@ -1,4 +1,4 @@
-# projector/output.py
+# projection/output.py
 
 # Manages a fullscreen window on the projector (second display)
 #    using Pygame; draws the simulation visuals and any
@@ -7,7 +7,7 @@
 # ----- Imports -----
 import pygame
 import logging
-from projector.exceptions import ProjectorInitError
+from projection.exceptions import ProjectorInitError
 
 # ----- Logger -----
 logger = logging.getLogger(__name__)
