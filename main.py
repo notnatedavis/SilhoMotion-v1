@@ -58,32 +58,31 @@ if __name__ == "__main__" :
                 return
             logger.info("Opening projector window on display %d...",
                         config.PROJECTOR_SCREEN)
-            # The projector runs in its own thread
+            # Pyglet can run in a separate thread – its event loop is not mandatory
+            # if we manually call window.dispatch_events() and flip().
             def projector_loop(stop_flag: threading.Event) :
-                import pygame
+                import pyglet
                 proj = ProjectorWindow(config.PROJECTOR_SCREEN,
                                        (config.PROJECTOR_WIDTH, config.PROJECTOR_HEIGHT))
-                clock = proj.clock
                 try :
                     while not stop_flag.is_set() :
-                        for event in pygame.event.get() :
-                            if event.type == pygame.QUIT :
-                                stop_flag.set()
-                                break
-                        proj.screen.fill((46, 46, 46))
-                        pygame.display.flip()
-                        clock.tick(30)
+                        # Process pending OS events (so the window doesn't freeze)
+                        proj.window.dispatch_events()
+                        # Render a frame (placeholder for now)
+                        proj.draw_frame({})
+                        # Throttle – pyglet's clock handles this
+                    proj.close()
+                except Exception as e :
+                    logger.exception("Projector loop error: %s", e)
                 finally :
                     proj.close()
                     logger.info("Projection window closed.")
                     global projector
                     projector = None
 
-            # Start projection thread (non‑blocking)
             stop_flag = threading.Event()
             thread = threading.Thread(target=projector_loop, args=(stop_flag,), daemon=True)
             thread.start()
-            # Store flag so we can stop it later (e.g., on quit)
             global _projector_stop_flag, _projector_thread
             _projector_stop_flag = stop_flag
             _projector_thread = thread
@@ -92,7 +91,6 @@ if __name__ == "__main__" :
         # ----- Quit: release resources -----
         def quit_app() :
             global camera
-            # Stop projector if running
             if '_projector_stop_flag' in globals() :
                 _projector_stop_flag.set()
                 _projector_thread.join(timeout=3)
