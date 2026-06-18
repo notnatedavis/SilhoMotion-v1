@@ -17,7 +17,9 @@ class ProjectorWindow :
 
     def __init__(self, screen_index=1, resolution=(1920, 1080)) :
         # Locate the target display (0‑based)
-        displays = pyglet.canvas.get_display().get_screens()
+        display = pyglet.display.get_display()
+        screens = display.get_screens()
+        
         if screen_index >= len(displays) :
             raise ProjectorInitError(
                 f"Requested display {screen_index} but only {len(displays)} display(s) found."

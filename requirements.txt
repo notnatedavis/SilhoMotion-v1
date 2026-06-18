@@ -3,6 +3,6 @@
 numpy>=2.0,<3
 opencv-python>=4.10.0.84
 pymunk==6.6.0
-pyglet>=2.0
 pytest==8.2.0
 customtkinter
+pillow

@@ -18,5 +18,10 @@ FONT_HEADING = ("Segoe UI", 16, "bold")
 FONT_BUTTON  = ("Segoe UI", 13, "bold")
 FONT_BODY    = ("Segoe UI", 12)
 
-# ---- Custom colours (rarely needed, but available) ----
-DANGER_COLOUR = "#C0392B"   # for critical buttons (quit)
+# ---- Generic font for Tkinter controls (used in control_window.py) ----
+FONT = ("Segoe UI", 11)          # for checkbuttons, labels, scale, etc.
+
+# ---- Custom colours ----
+BG_COLOUR = "#2C3E50"            # dark background for the control window
+BUTTON_COLOUR = "#3498DB"        # blue for buttons (matching CustomTkinter's "blue" theme)
+DANGER_COLOUR = "#C0392B"        # for critical buttons (quit)
