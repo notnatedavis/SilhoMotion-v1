@@ -6,3 +6,4 @@ pymunk==6.6.0
 pytest==8.2.0
 customtkinter
 pillow
+mediapipe>=0.10.0
