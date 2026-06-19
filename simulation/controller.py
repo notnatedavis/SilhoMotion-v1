@@ -10,11 +10,11 @@ import time
 import logging
 import tkinter as tk
 import cv2
-import mediapipe as mp
 from common import Config
 from camera.capture import SilhouetteCapture, CameraNotFoundError
 from physics.simulation import PhysicsWorld
 from simulation.renderer import Renderer
+from pose.detector import PoseDetector, get_default_detector
 
 # ----- Logger -----
 logger = logging.getLogger(__name__)
@@ -24,17 +24,8 @@ class SimulationController:
 
     def __init__(self, canvas: tk.Canvas, window: tk.Toplevel, config: Config,
                  camera_obj: SilhouetteCapture,
+                 pose_detector: PoseDetector = None,
                  on_stop_callback=None):
-        try:
-            self.mp_pose = mp.solutions
-            self.pose = self.mp_pose.Pose(...)
-        except AttributeError:
-            raise ImportError(
-                "MediaPipe 'solutions' module not found. "
-                "Ensure mediapipe is installed (pip install mediapipe) and "
-                "that no local file shadows the package."
-            )
-        
         """
         Initialise the simulation controller.
 
@@ -43,6 +34,8 @@ class SimulationController:
             window: Toplevel window hosting the canvas.
             config: Configuration object.
             camera_obj: An already connected SilhouetteCapture instance.
+            pose_detector: Optional PoseDetector instance. If not provided,
+                           the default detector (MediaPipe if available) is used.
             on_stop_callback: Optional callable invoked when stop() is called.
         """
         self.canvas = canvas
@@ -61,15 +54,9 @@ class SimulationController:
         # ---- Renderer ----
         self.renderer = Renderer(canvas, canvas.winfo_width(), canvas.winfo_height())
 
-        # ---- Pose detection with MediaPipe ----
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
-        logger.info("MediaPipe Pose initialised.")
+        # ---- Pose detection (pluggable) ----
+        self.pose_detector = pose_detector if pose_detector is not None else get_default_detector()
+        logger.info("Pose detector: %s", self.pose_detector.__class__.__name__)
 
         # ---- Control flags ----
         self.running = False
@@ -80,9 +67,7 @@ class SimulationController:
 
         # ---- State variables ----
         self.latest_frame = None          # Raw camera frame (for background)
-        self.head_center = None           # (x, y) in canvas coordinates
-        self.head_radius = 0.0
-        self.pose_landmarks = None        # dict of joint pixel coords (or None)
+        self.pose_landmarks = None        # dict of joint pixel coords (frame space)
 
         # ---- Threading ----
         self.capture_queue = queue.Queue(maxsize=1)
@@ -192,6 +177,28 @@ class SimulationController:
         interval = int(1000 / self.config.FRAME_RATE)
         self._update_id = self.canvas.after(interval, self._update)
 
+    def _frame_to_canvas(self, point, frame_shape, canvas_shape):
+        """Convert a point (x,y) from frame pixel space to canvas pixel space."""
+        fx, fy = point
+        fh, fw = frame_shape[:2]
+        cw, ch = canvas_shape
+        if fw <= 0 or fh <= 0:
+            return point
+        scale_x = cw / fw
+        scale_y = ch / fh
+        return (fx * scale_x, fy * scale_y)
+
+    def _scale_radius(self, radius, frame_shape, canvas_shape):
+        """Scale a radius from frame space to canvas space."""
+        fh, fw = frame_shape[:2]
+        cw, ch = canvas_shape
+        if fw <= 0 or fh <= 0:
+            return radius
+        scale_x = cw / fw
+        scale_y = ch / fh
+        # Use average scaling to keep proportions
+        return radius * (scale_x + scale_y) / 2.0
+
     def _update(self):
         if not self.running:
             return
@@ -201,25 +208,44 @@ class SimulationController:
             data = self.capture_queue.get_nowait()
             if data is not None:
                 self.latest_frame, pose_norm = data
-                # Convert normalized landmarks to pixel coordinates
-                if pose_norm is not None:
-                    self.pose_landmarks = self._normalized_to_pixel(pose_norm)
-                else:
-                    self.pose_landmarks = None
+                # pose_norm is dict of joint names -> (x, y) in frame pixel coordinates
+                self.pose_landmarks = pose_norm  # store raw frame coords
         except queue.Empty:
             pass
 
-        # Compute head center and radius from pose landmarks
-        head_center = None
-        head_radius = 0.0
-        if self.pose_landmarks is not None:
-            head_center, head_radius = self._compute_head_from_pose(self.pose_landmarks)
+        if self.latest_frame is None:
+            self._schedule_update()
+            return
 
-        # Physics step
+        frame_shape = self.latest_frame.shape
+        canvas_shape = (self.renderer.width, self.renderer.height)
+
+        # ---- Get head from pose detector (frame space) ----
+        rgb = cv2.cvtColor(self.latest_frame, cv2.COLOR_BGR2RGB)
+        hx, hy, hrad = self.pose_detector.detect_head(rgb)
+
+        head_center_canvas = None
+        head_radius_canvas = 0.0
+        if hx is not None:
+            # Convert head center to canvas coordinates
+            head_center_canvas = self._frame_to_canvas((hx, hy), frame_shape, canvas_shape)
+            head_radius_canvas = self._scale_radius(hrad, frame_shape, canvas_shape)
+
+        # ---- Convert pose landmarks to canvas coordinates (if any) ----
+        pose_landmarks_canvas = None
+        if self.pose_landmarks is not None:
+            pose_landmarks_canvas = {}
+            for name, pos in self.pose_landmarks.items():
+                if pos is not None:
+                    pose_landmarks_canvas[name] = self._frame_to_canvas(pos, frame_shape, canvas_shape)
+                else:
+                    pose_landmarks_canvas[name] = None
+
+        # ---- Physics step ----
         if not self.paused:
-            # Update head circle in physics if skeleton is enabled
-            if self.draw_skeleton and head_center is not None and head_radius > 0:
-                self.physics.set_head_circle(head_center[0], head_center[1], head_radius)
+            # Update head circle in physics if skeleton is enabled and we have a head
+            if self.draw_skeleton and head_center_canvas is not None and head_radius_canvas > 0:
+                self.physics.set_head_circle(head_center_canvas[0], head_center_canvas[1], head_radius_canvas)
             else:
                 self.physics.clear_head_circle()
 
@@ -241,14 +267,14 @@ class SimulationController:
         # Get dynamic objects
         dynamic_objs = self.physics.get_dynamic_objects()
 
-        # Prepare pose drawing data (only if skeleton enabled)
-        pose_draw = self.pose_landmarks if self.draw_skeleton else None
+        # Prepare pose drawing data (only if skeleton enabled and we have landmarks)
+        pose_draw = pose_landmarks_canvas if (self.draw_skeleton and pose_landmarks_canvas is not None) else None
 
         # Render everything
         self.renderer.update(
             background_image=bg_frame,
-            head_center=head_center if self.draw_skeleton else None,
-            head_radius=head_radius if self.draw_skeleton else 0,
+            head_center=head_center_canvas if self.draw_skeleton else None,
+            head_radius=head_radius_canvas if self.draw_skeleton else 0,
             head_color=self.skeleton_color if self.draw_skeleton else None,
             dynamic_objects=dynamic_objs,
             pose_landmarks=pose_draw,
@@ -266,31 +292,9 @@ class SimulationController:
                     time.sleep(0.01)
                     continue
 
-                # Perform pose detection on the frame (MediaPipe expects RGB)
+                # Perform pose detection on the frame (RGB)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.pose.process(rgb)
-
-                pose_norm = None
-                if results.pose_landmarks:
-                    # Extract relevant landmarks with visibility threshold
-                    landmarks = results.pose_landmarks.landmark
-                    # Map landmark indices to names
-                    indices = {
-                        'nose': 0,
-                        'left_shoulder': 11,
-                        'right_shoulder': 12,
-                        'left_elbow': 13,
-                        'right_elbow': 14,
-                        'left_wrist': 15,
-                        'right_wrist': 16,
-                    }
-                    pose_norm = {}
-                    for name, idx in indices.items():
-                        lm = landmarks[idx]
-                        if lm.visibility >= 0.5:
-                            pose_norm[name] = (lm.x, lm.y)   # normalized 0..1
-                        else:
-                            pose_norm[name] = None
+                pose_norm = self.pose_detector.detect(rgb)
 
                 # Put the frame and pose data into the queue
                 if self.capture_queue.full():
@@ -304,48 +308,3 @@ class SimulationController:
                 logger.exception("Error in capture loop: %s", e)
                 time.sleep(0.1)
         logger.debug("Capture loop stopped.")
-
-    def _normalized_to_pixel(self, pose_norm):
-        """Convert normalized landmarks (0..1) to pixel coordinates using current canvas size."""
-        w = self.renderer.width
-        h = self.renderer.height
-        if w <= 0 or h <= 0:
-            return None
-        pixel = {}
-        for name, coords in pose_norm.items():
-            if coords is not None:
-                x, y = coords
-                pixel[name] = (x * w, y * h)
-            else:
-                pixel[name] = None
-        return pixel
-
-    def _compute_head_from_pose(self, pose_pixel):
-        """Determine head center and radius from pose landmarks (pixel coords)."""
-        nose = pose_pixel.get('nose')
-        l_shoulder = pose_pixel.get('left_shoulder')
-        r_shoulder = pose_pixel.get('right_shoulder')
-
-        # Head center: prefer nose, else midpoint of shoulders
-        center = None
-        if nose is not None:
-            center = nose
-        elif l_shoulder is not None and r_shoulder is not None:
-            center = ((l_shoulder[0] + r_shoulder[0]) / 2,
-                      (l_shoulder[1] + r_shoulder[1]) / 2)
-
-        if center is None:
-            return None, 0.0
-
-        # Head radius: based on shoulder distance or default
-        radius = 30.0  # fallback
-        if l_shoulder is not None and r_shoulder is not None:
-            dx = r_shoulder[0] - l_shoulder[0]
-            dy = r_shoulder[1] - l_shoulder[1]
-            shoulder_dist = (dx*dx + dy*dy) ** 0.5
-            if shoulder_dist > 0:
-                radius = shoulder_dist * 0.3   # ~30% of shoulder width
-                radius = max(15.0, min(80.0, radius))  # clamp
-        # If only one shoulder, use default (already set)
-
-        return center, radius

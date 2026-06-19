@@ -94,11 +94,11 @@ SilhoMotion/
 
 2. **Set up environment**
     ```bash
-    pyenv install 3.12.0 # if not already installed
-    pyenv local 3.12.0   # sets in use
-    python -m venv venv312
-    venv\Scripts\activate # Windows
-    or # source venv312/bin/activate # macOS/Linux
+    pyenv install 3.10.0 # if not already installed
+    pyenv local 3.10.0   # sets in use
+    python -m venv venv310
+    venv310\Scripts\activate # Windows
+    or # source venv310/bin/activate # macOS/Linux
     ```
 
 3. **Prerequisites**
